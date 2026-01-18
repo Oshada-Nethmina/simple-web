@@ -10,26 +10,25 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout source code
         uses: actions/checkout@v4
 
-      - name: Setup SSH
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SERVER_SSH_KEY }}
+
+      - name: Add server to known_hosts
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SERVER_SSH_KEY }}" | tr -d '\r' > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Test SSH connection
+      - name: Deploy website files
         run: |
-          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no \
-          ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "whoami"
+          rsync -az --delete \
+            --exclude ".git" \
+            --exclude ".github" \
+            ./ ubuntu@${{ secrets.SERVER_HOST }}:/var/www/html/
 
-      - name: Deploy files to server
+      - name: Reload Nginx
         run: |
-          rsync -avz --delete \
-            -e "ssh -i ~/.ssh/id_ed25519" \
-            --exclude='.git' \
-            --exclude='.github' \
-            ./ \
-            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/var/www/html
+          ssh ubuntu@${{ secrets.SERVER_HOST }} "sudo systemctl reload nginx"
